@@ -20,8 +20,8 @@ def fetch_last_prompt() -> str:
     return last_prompt
 
 if __name__ == "__main__":
-    question: str = "Is it possible to create an AI LLM that is completely free from decision fallacies, and what challenges exist in achieving this goal?"
-
+    question_file = open("question.txt", "r")
+    question: str = question_file.read()
     Debate(question) \
         .with_prompt(fetch_last_prompt()) \
         .with_limit(2) \
