@@ -1,6 +1,7 @@
 import langchain.llms.base
 
 from contphica.agents.debate_agent import DebateAgent
+from contphica.agents.hf_initiator import hugging_face_initiator
 from os import environ
 
 # from langchain.schema import BaseLanguageModel
@@ -8,7 +9,6 @@ from langchain.chat_models import ChatOpenAI
 # from gpt4_openai import GPT4OpenAI
 from langchain.chat_models.base import BaseChatModel
 from langchain.memory import ConversationSummaryBufferMemory
-
 
 class GptDebateAgent(DebateAgent):
     def __init__(self, api_key, prompt: langchain.BasePromptTemplate):
