@@ -2,3 +2,4 @@ ipython==8.16.1
 langchain==0.0.324
 openai==0.28.1
 python-dotenv==1.0.0
+langchain-gpt4free @ git+https://github.com/MIDORIBIN/langchain-gpt4free@main
