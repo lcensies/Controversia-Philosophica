@@ -1,8 +1,9 @@
+from typing import Type
+import time
 import langchain.prompts
 
 from contphica.agents.gpt_agent import GptDebateAgent
 from contphica.agents.debate_agent import DebateAgent
-from typing import Type
 
 DEFAULT_PROMPT_TEMPLATE = """
 # Dispute Dialogue
@@ -118,25 +119,19 @@ class Debate:
             self._responder_prompt = get_con_prompt()
         return self
 
-    def start(self):
+    def start_generator(self):
         self._initiator = self._initiator_model
         self._responder = self._responder_model
 
         last_message: str = self._topic
         
-        print(f"Topic: {last_message}")
-
         for i in range(self.limit):
-            print(f"---------- Round {i + 1} ----------\n\n")
-            
             last_message = self._initiator.generate_response(last_message)
-            print(f"{self._initiator_name}: {last_message}")
-
-            print('\n')
-
+            initiator_response = last_message
+            time.sleep(10)
             last_message = self._responder.generate_response(last_message)
-            print(f"{self._responder_name}: {last_message}")
-
-            print('\n\n')
+            responder_response = last_message
+            yield initiator_response, responder_response
+            time.sleep(10)
 
             
