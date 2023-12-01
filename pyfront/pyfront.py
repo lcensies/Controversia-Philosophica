@@ -18,20 +18,31 @@ from contphica.judge.judge_worker import JudgeWorker
 sys.path.append("..")
 from contphica.debate import Debate
 import nest_asyncio
+import textwrap
+from emoji import emojize
+
+emojis = {
+    "ok": emojize(":white_check_mark:", language="alias"),
+    "wait": emojize(":hourglass_not_done:", language="alias"),
+}
+
+class Emojis:
+    ok = emojis["ok"]
+    wait = emojis["wait"]
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.WARNING
 )
 
 load_dotenv(str(Path(__file__).parent.parent.joinpath(".env")))
 tok = os.getenv("TELEGRAM_API_KEY")
-openai_token = os.environ.get("OPENAI_API_KEY")
+openai_token = os.getenv("OPENAI_API_KEY")
 
-(SET_MODEL, SET_TOPIC, SET_OPINION_PRO, SET_OPINION_CON, SET_KNOWLEDGE, SET_DEBATER_NAMES, SET_PROMPT,
- START_DEBATE) = range(8)
-DEFAULT_MODEL = "underground_gpt"
-
+(SET_MODEL, SET_TOPIC, SET_OPINION_PRO, SET_OPINION_CON, SET_KNOWLEDGE,
+ SET_DEBATER_NAMES, SET_PROMPT, START_DEBATE, DEBATE_CONFIRM) = range(9)
+avail_models = ['gpt3', 'dialogpt']
+DEFAULT_MODEL = "gpt3"
 
 def send_action(action):
     """Sends `action` while processing func command."""
@@ -46,7 +57,6 @@ def send_action(action):
 
     return decorator
 
-
 def get_cmd_handlers(handlers_dict):
     cmd_handlers = []
     for cmd_name, cmd_handler in handlers_dict.items():
@@ -58,7 +68,6 @@ def get_cmd_handlers(handlers_dict):
 def add_handlers(application, handlers):
     for handler in handlers:
         application.add_handler(handler)
-
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     greeting = """Welcome to Controversia Philosophica! Here you can make LLM agents debate about any topic you want."""
@@ -80,47 +89,50 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def set_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
     avail_models = ['gpt3', 'dialogpt', "underground_gpt"]
 
-    async def validate():
-        if len(context.args) == 0:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="Please specify a model")
+    async def validate(model):
+        if len(model) == 0:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Please specify a model. Available models are: {}".format(avail_models))
             return False
-        if context.args[0] not in avail_models:
-            await context.bot.send_message(chat_id=update.effective_chat.id,
-                                           text="Invalid model. Available models are: {}".format(avail_models))
+        if model not in avail_models:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Invalid model. Available models are: {}".format(avail_models))
             return False
         return True
 
-    if await validate():
-        model = context.args[0]
+    model: str = update.message.text
+    if await validate(model):
         context.user_data['model'] = model
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Setting model to {}".format(model))
+        await update.message.reply_text(text=emojis["ok"] + " Setting model to {}!\nNow we can start. Type 'start' if you are ready.".format(model), )
+    return START_DEBATE
 
 
 async def set_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) == 0:
+    topic = update.message.text.strip()
+    if len(topic) == 0:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Please specify a topic")
-        return
-    topic = ' '.join(context.args)
+        return SET_TOPIC
     context.user_data['topic'] = topic
-    await context.bot.send_message(chat_id=update.effective_chat.id, text='Setting topic to "{}"'.format(topic))
+    await update.message.reply_text(Emojis.ok + f' Setting topic to "{topic}"\nPlease specify an opinion pro:')
+    return SET_OPINION_PRO
 
 
 async def set_opinion_pro(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) == 0:
+    opinion = update.message.text.strip()
+    if len(opinion) == 0:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Please specify an opinion")
-        return
-    opinion = ' '.join(context.args)
+        return SET_OPINION_PRO
     context.user_data['opinion_pro'] = opinion
-    await context.bot.send_message(chat_id=update.effective_chat.id, text='Setting opinion pro to "{}"'.format(opinion))
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=Emojis.ok + f' Setting opinion pro to "{opinion}".\nPlease specify an opinion con:')
+    return SET_OPINION_CON
 
 
 async def set_opinion_con(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if len(context.args) == 0:
+    opinion = update.message.text.strip()
+    if len(opinion) == 0:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Please specify an opinion")
         return
-    opinion = ' '.join(context.args)
     context.user_data['opinion_con'] = opinion
-    await context.bot.send_message(chat_id=update.effective_chat.id, text='Setting opinion con to "{}"'.format(opinion))
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=f'Setting opinion con to "{opinion}".\nPlease specify a model. Available models: {avail_models}')
+    return SET_MODEL
 
     # TODO: cancel on reset
 
@@ -135,7 +147,7 @@ async def start_debate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     def get_debate(topic_, opinion_pro_, opinion_con_,
                    debater_name_pro="Debater Pro",
                    debater_name_con="Debater Con",
-                   knowledge="<no dispute knowledge given>"):
+                   knowledge="<no dispute knowledge given>", rounds_=2):
         debate = (Debate(topic_)
                   .with_knowledge(knowledge)
                   .with_opinions(pro=opinion_pro_, con=opinion_con_)
@@ -159,7 +171,6 @@ async def start_debate(update: Update, context: ContextTypes.DEFAULT_TYPE):
             raise ValueError("Please set a pro opinion first")
         if 'opinion_con' not in context.user_data:
             raise ValueError("Please set a con opinion first")
-
     try:
         validate()
     except ValueError as e:
@@ -169,11 +180,26 @@ async def start_debate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     topic = context.user_data['topic']
     opinion_pro = context.user_data['opinion_pro']
     opinion_con = context.user_data['opinion_con']
+    debater_pro_name = "Debater Pro"
+    debater_con_name = "Debater Con"
+    rounds = 2
 
+    status_text = f"""
+                    Starting debate.
+                    Topic: {topic}
+                    Opinion pro: {opinion_pro}
+                    Opinion con: {opinion_con}
+                    Model: {model}
+                    """
+    status_text = textwrap.dedent(status_text)
     await context.bot.send_message(chat_id=update.effective_chat.id,
-                                   text=f"Starting debate.\nTopic: {topic}\nOpinion pro: {opinion_pro}\nOpinion con: {opinion_con}\nModel: {model}")
-    debate = get_debate(topic, opinion_pro, opinion_con)
-    assert debate
+                                   text=status_text,
+                                   parse_mode=constants.ParseMode.HTML)
+    await context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=constants.ChatAction.TYPING)
+    debate = get_debate(topic, opinion_pro, opinion_con,
+                        debater_pro_name, debater_con_name)
+
+    await update.message.reply_text(Emojis.wait + " Inference in progress. This will take about a minute. Please hold on!")
 
     if debate.has_judge:
         answers_queue: Queue = Queue()
@@ -182,17 +208,17 @@ async def start_debate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         judge_worker = JudgeWorker(debate, answers_queue, judgements_queue)
         judge_worker_task = asyncio.create_task(judge_worker.start())
 
-    for i, (pro_argument, con_argument) in enumerate(debate.start_generator()):
-        if debate.has_judge:
-            await answers_queue.put((pro_argument, con_argument))
-        pro_argument = pro_argument.replace(".", "\\.")
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="*Debate round {}*".format(i),
+    debate_generator = debate.start_generator()
+    for i in range(rounds):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<b>===== Debate round {i+1} =====</b>",
                                        parse_mode=constants.ParseMode.HTML)
-        await asyncio.sleep(2)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="*Pro:*\n\n" + pro_argument,
+
+        pro_argument = next(debate_generator)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<b>Pro:</b>\n" + pro_argument,
                                        parse_mode=constants.ParseMode.HTML)
-        await asyncio.sleep(2)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="*Con:*\n\n" + con_argument,
+
+        con_argument = next(debate_generator)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<b>Con:</b>\n" + con_argument,
                                        parse_mode=constants.ParseMode.HTML)
 
     if debate.has_judge:
@@ -207,17 +233,33 @@ async def start_debate(update: Update, context: ContextTypes.DEFAULT_TYPE):
             judgement = await judgements_queue.get()
         judgements_queue.task_done()
 
-        # assert len(judgements) > 0
+    if len(judgements) > 0:
+        # If there is no judgements in array, probably
+        # there is an issue with the judge, for example
+        # due to the API quota
+        judgement = judgements[-1]
 
-        if len(judgements) > 0:
-            # If there is no judgements in array, probably
-            # there is an issue with the judge, for example
-            # due to the API quota
-            judgement = judgements[-1]
+        await context.bot.send_message(chat_id=update.effective_chat.id,
+                                       text="*Iudex judgement:*\n\n" + judgement,
+                                       parse_mode=constants.ParseMode.HTML)
 
-            await context.bot.send_message(chat_id=update.effective_chat.id,
-                                           text="*Iudex judgement:*\n\n" + judgement,
-                                           parse_mode=constants.ParseMode.HTML)
+    return ConversationHandler.END
+
+
+async def start_debate_state_machine(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(textwrap.dedent("""
+                                    Setting up the debate!
+                                    Please specify the topic:
+                                    """))
+    return SET_TOPIC
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Cancelling debate. Do /debate to start again.")
+    for key in {'topic', 'opinion_pro', 'opinion_con', 'model'}:
+        if key in context.user_data:
+            del context.user_data[key]
+    return ConversationHandler.END
 
 
 def main():
@@ -235,20 +277,31 @@ def main():
     }
 
     handlers = get_cmd_handlers(cmd_handlers)
-    # conv_handler = ConversationHandler(
-    #     entry_points=[CommandHandler("start_debate", start)],
-    #     states={
-    #         SET_TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_topic)],
-    #         SET_OPINION_PRO: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_opinion_pro)],
-    #         SET_OPINION_CON: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_opinion_con)],
-    #         SET_MODEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_model)],
-    #     },
-    #     fallbacks=[CommandHandler("cancel", cancel)],
-    # )
-
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("debate", start_debate_state_machine)],
+        states={
+            SET_TOPIC: [
+                MessageHandler(None, set_topic)
+            ],
+            SET_OPINION_PRO: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, set_opinion_pro)
+            ],
+            SET_OPINION_CON: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, set_opinion_con)
+            ],
+            SET_MODEL: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, set_model)
+            ],
+            START_DEBATE: [
+                MessageHandler(filters.Regex("^Start$") | filters.Regex("^start$"), start_debate)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    handlers.append(conv_handler)
     add_handlers(application, handlers)
+    print("Contphica Bot is up and running!")
     application.run_polling()
-
 
 if __name__ == '__main__':
     main()
