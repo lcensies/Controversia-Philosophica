@@ -7,8 +7,13 @@ from telegram import Update, constants
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters, ConversationHandler
 import sys
 import os
+import time
+
+
 sys.path.append("..")
 from contphica.debate import Debate
+import contphica.agents.gpt_agent
+from langchain.chat_models.openai import ChatOpenAI
 import textwrap
 from emoji import emojize
 
@@ -23,7 +28,7 @@ class Emojis:
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.WARNING
+    level=logging.INFO
 )
 
 tok = os.getenv("TELEGRAM_API_KEY")
@@ -60,7 +65,7 @@ def add_handlers(application, handlers):
         application.add_handler(handler)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    greeting = """Welcome to Controversia Philosophica! Here you can make LLM agents debate about any topic you want."""
+    greeting = """Welcome to Controversia Philosophica! Here you can make LLM agents debate about any topic you want. Type /debate to start a debate."""
     await context.bot.send_message(chat_id=update.effective_chat.id, text=greeting)
 
 
@@ -150,7 +155,8 @@ async def startdebate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     opinion_con = context.user_data['opinion_con']
     debater_pro_name = "Debater Pro"
     debater_con_name = "Debater Con"
-    rounds = 2
+    dispute_knowledge = "<no dispute knowledge given>"
+    rounds = 1
 
     status_text = f"""
                     Starting debate.
@@ -159,6 +165,7 @@ async def startdebate(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     Opinion con: {opinion_con}
                     Model: {model}
                     """
+    logging.log(logging.INFO, status_text.replace("\n", ";"))
     status_text = textwrap.dedent(status_text)
     await context.bot.send_message(chat_id=update.effective_chat.id,
                                    text=status_text,
@@ -169,17 +176,51 @@ async def startdebate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(Emojis.wait + " Inference in progress. This will take about a minute. Please hold on!")
     debate_generator = debate.start_generator()
+    chat_history = []
     for i in range(rounds):
         await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<b>===== Debate round {i+1} =====</b>",
                                        parse_mode=constants.ParseMode.HTML)
 
         pro_argument = next(debate_generator)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<b>Pro:</b>\n" + pro_argument,
+        pro_argument_text = f"<b>{debater_pro_name}:</b>\n" + pro_argument
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=pro_argument_text,
                                        parse_mode=constants.ParseMode.HTML)
 
         con_argument = next(debate_generator)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<b>Con:</b>\n" + con_argument,
+        con_argument_text = f"<b>{debater_con_name}:</b>\n" + con_argument
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=con_argument_text,
                                        parse_mode=constants.ParseMode.HTML)
+        chat_history.append(pro_argument_text)
+        chat_history.append(con_argument_text)
+
+    chat_history = "\n".join(chat_history)
+    judge_prompt_template = f"""
+# Dispute Dialogue
+    Role: You are a Judge in a debate that evaluates arguments of two debaters in a dispute dialogue about topic: {topic}.
+    The opinion of debater {debater_pro_name}: {opinion_pro}.
+    The opinion of debater {debater_con_name}: {opinion_con}. 
+    
+    You must decide which debater has the better arguments.
+    Evaluate the following: alignment with given dispute knowledge, relevance, and persuasiveness. Respect to the opponent is also important.
+    Based on this, each debater's arguments a score between 0 and 10, where 0 means that the argument is not convincing at all and 10 means that the argument is very convincing.
+    Below, you will have a chat history of the debate. You can also see the dispute knowledge that was given to the debaters.
+# Dispute Knowledge 
+    {dispute_knowledge}
+# Debate history
+    {chat_history}
+# Your verdict on this debate
+Be concise, use bullet points.
+Judge's verdict:
+"""
+    await update.message.reply_text(Emojis.wait + f" Waiting for judge verdict... This will take nearly half a minute.", parse_mode=constants.ParseMode.HTML)
+    time.sleep(30)
+    judge = ChatOpenAI(openai_api_key=openai_token)
+    verdict = await judge.apredict(judge_prompt_template)
+    if type(verdict) == list:
+        verdict = str(verdict[0]).strip()
+    else:
+        verdict = str(verdict).strip()
+    await update.message.reply_text(f"<b>Judge:</b>\n{verdict}", parse_mode=constants.ParseMode.HTML)
     return ConversationHandler.END
 
 
