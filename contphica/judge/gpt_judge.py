@@ -1,7 +1,7 @@
 import langchain.llms.base
 
 from contphica.agents.debate_agent import DebateAgent
-from contphica.agents.hf_initiator import hugging_face_initiator
+from contphica.agents.hf_agent import make_hugging_face_agent
 from os import environ
 
 # from langchain.schema import BaseLanguageModel

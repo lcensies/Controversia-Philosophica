@@ -32,7 +32,8 @@ class Emojis:
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.WARNING
+    level=logging.WARNING,
+    # stream=sys.stdout
 )
 
 load_dotenv(str(Path(__file__).parent.parent.joinpath(".env")))
@@ -138,9 +139,7 @@ async def set_opinion_con(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start_debate(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # TODO: encapsulate queues to worker
-    answers_queue: Optional[Queue] = None
-    judgements_queue: Optional[Queue] = None
+    judgements: Optional[typing.List[str]] = None
     judge_worker: Optional[JudgeWorker] = None
     judge_worker_task: Optional[Task] = None
 
@@ -202,10 +201,7 @@ async def start_debate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(Emojis.wait + " Inference in progress. This will take about a minute. Please hold on!")
 
     if debate.has_judge:
-        answers_queue: Queue = Queue()
-        judgements_queue: Queue = Queue()
-
-        judge_worker = JudgeWorker(debate, answers_queue, judgements_queue)
+        judge_worker = JudgeWorker(debate)
         judge_worker_task = asyncio.create_task(judge_worker.start())
 
     debate_generator = debate.start_generator()
@@ -218,20 +214,14 @@ async def start_debate(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                        parse_mode=constants.ParseMode.HTML)
 
         con_argument = next(debate_generator)
+
+        if debate.has_judge:
+            await judge_worker.add_debate_results(pro_argument, con_argument)
         await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<b>Con:</b>\n" + con_argument,
                                        parse_mode=constants.ParseMode.HTML)
 
     if debate.has_judge:
-        # TODO: refactor
-        await answers_queue.put((None, None))
-        await judge_worker_task
-        judgements: typing.List[str] = []
-        judgement = await judgements_queue.get()
-        while judgement:
-            judgements.append(judgement)
-            judgements_queue.task_done()
-            judgement = await judgements_queue.get()
-        judgements_queue.task_done()
+        judgements = await judge_worker.finalize()
 
     if len(judgements) > 0:
         # If there is no judgements in array, probably

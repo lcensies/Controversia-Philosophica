@@ -1,7 +1,7 @@
 from langchain.llms.huggingface_pipeline import HuggingFacePipeline
 
 default_model_id = "gpt2"
-def hugging_face_initiator(model_id = default_model_id, num_toxens = 200):
+def make_hugging_face_agent(model_id = default_model_id, num_toxens = 200):
     hf = HuggingFacePipeline.from_model_id(
     model_id= model_id,
     task="text-generation",

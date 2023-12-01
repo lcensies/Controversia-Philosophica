@@ -5,8 +5,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="a0efe293-b1e6-4b31-a0fc-1365d7540d28" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/contphica/agents/cript_agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/contphica/agents/cript_agent.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/contphica/agents/gpt_agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/contphica/agents/gpt_agent.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/contphica/debate/debate.py" beforeDir="false" afterPath="$PROJECT_DIR$/contphica/debate/debate.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/contphica/agents/hf_initiator.py" beforeDir="false" afterPath="$PROJECT_DIR$/contphica/agents/hf_agent.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/contphica/judge/gpt_judge.py" beforeDir="false" afterPath="$PROJECT_DIR$/contphica/judge/gpt_judge.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/contphica/judge/judge_worker.py" beforeDir="false" afterPath="$PROJECT_DIR$/contphica/judge/judge_worker.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pyfront/pyfront.py" beforeDir="false" afterPath="$PROJECT_DIR$/pyfront/pyfront.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -36,15 +41,15 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "RunOnceActivity.OpenProjectViewOnStart": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "Merging judge",
-    "last_opened_file_path": "/home/f32/repos/contphica",
-    "settings.editor.selected.configurable": "project.propVCSSupport.DirectoryMappings"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;refactor&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/f32/repos/contphica&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;project.propVCSSupport.DirectoryMappings&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$" />
