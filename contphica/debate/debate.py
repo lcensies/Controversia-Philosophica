@@ -1,9 +1,15 @@
+import asyncio
+import os
 from typing import Type
 import time
 import langchain.prompts
 
 from contphica.agents.gpt_agent import GptDebateAgent
 from contphica.agents.debate_agent import DebateAgent
+from contphica.agents.phind_agent import PhindAgent
+from contphica.agents.underground_gpt_agent import UndergroundGptDebateAgent
+from contphica.judge.gpt_judge import GptJudge
+from contphica.judge.judge import Judge
 
 DEFAULT_PROMPT_TEMPLATE = """
 # Dispute Dialogue
@@ -50,6 +56,12 @@ class Debate:
 
     _prompt: str = None
 
+    _has_throttling: bool = False
+    _throttling_sec: int = 0
+
+    _has_judge: bool = False
+    _judge: Judge
+
     @property
     def limit(self):
         return self._limit
@@ -57,6 +69,18 @@ class Debate:
     @property
     def topic(self):
         return self._topic
+
+    @property
+    def has_judge(self):
+        return self._has_judge
+
+    @property
+    def judge(self):
+        return self._judge
+
+    @property
+    def throttling_sec(self):
+        return self._throttling_sec
 
     def __init__(self, topic: str, limit: int = 2):
         self._topic = topic
@@ -69,7 +93,17 @@ class Debate:
     def with_gpt_agents(self, token):
         self._initiator_model = GptDebateAgent(api_key=token, prompt=self._initiator_prompt)
         self._responder_model = GptDebateAgent(api_key=token, prompt=self._responder_prompt)
-        return self 
+        return self
+
+    def with_underground_gpt_agents(self):
+        self._initiator_model = UndergroundGptDebateAgent(prompt=self._initiator_prompt)
+        self._responder_model = UndergroundGptDebateAgent(prompt=self._responder_prompt)
+        return self
+
+    def with_phind_agents(self):
+        self._initiator_model = PhindAgent(prompt=self._initiator_prompt)
+        self._responder_model = PhindAgent(prompt=self._responder_prompt)
+        return self
 
     def with_debater_names(self, initiator_name: str, responder_name: str):
         self._initiator_name = initiator_name
@@ -83,6 +117,22 @@ class Debate:
     def with_opinions(self, pro: str, con: str):
         self._opinion_pro = pro
         self._opinion_con = con
+        return self
+
+    def with_throttling(self, seconds=10):
+        self._has_throttling = True
+        self._throttling_sec = seconds
+        return self
+
+    def with_judge(self):
+        # TODO: custom judge model
+        self._has_judge = True
+        self._judge = Judge()
+        return self
+
+    def with_gpt_judge(self, judge_token: str):
+        self._has_judge = True
+        self._judge = GptJudge(judge_token)
         return self
 
     def with_prompt(self, prompt: str):
@@ -128,10 +178,12 @@ class Debate:
         for i in range(self.limit):
             last_message = self._initiator.generate_response(last_message)
             initiator_response = last_message
-            time.sleep(10)
+            if self._has_throttling:
+                time.sleep(self._throttling_sec)
             last_message = self._responder.generate_response(last_message)
             responder_response = last_message
             yield initiator_response, responder_response
-            time.sleep(10)
+            if self._has_throttling:
+                time.sleep(self._throttling_sec)
 
             
