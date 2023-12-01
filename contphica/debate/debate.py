@@ -1,8 +1,9 @@
+from typing import Type
+import time
 import langchain.prompts
 
 from contphica.agents.gpt_agent import GptDebateAgent
 from contphica.agents.debate_agent import DebateAgent
-from typing import Type
 
 DEFAULT_PROMPT_TEMPLATE = """
 # Dispute Dialogue
@@ -12,13 +13,13 @@ DEFAULT_PROMPT_TEMPLATE = """
 # Rules:
     Below, in the "Dispute Knowledge" session, you can find context for the discussion you can refer to. Rephrase it IN YOUR OWN WORDS and DO NOT repeat yourself.
     The goal of the discussion is to persuade your opponent and your audience that your point of view is valid and that your opponent is wrong.
-    You should maintain elaborated and civilized academic discussion while advocating for your point of view.
     Your opponent will provide his arguments.
     If you think that your opponent's argument is valid, you should agree with it and provide additional arguments to support your point of view.
     If you think that your opponent's argument is invalid, you should provide counter-arguments to refute it.
     Your opponent will do the same.
-    You can finish if you think that your opponent persuades you, or if you persuaded your opponent, or if you have no more arguments to provide. But do not admit defeat too early.
+    You can finish if you think that your opponent persuades you, or if you persuaded your opponent, or if you have no more arguments to provide.
     You MUST NOT repeat your point of view in the end of every response. Just provide your arguments.
+    You MUST BE concise and eloquent.
 # Dispute Knowledge 
     {dispute_knowledge}
 # Chat history
@@ -118,25 +119,20 @@ class Debate:
             self._responder_prompt = get_con_prompt()
         return self
 
-    def start(self):
+    def start_generator(self):
         self._initiator = self._initiator_model
         self._responder = self._responder_model
 
         last_message: str = self._topic
         
-        print(f"Topic: {last_message}")
-
         for i in range(self.limit):
-            print(f"---------- Round {i + 1} ----------\n\n")
-            
             last_message = self._initiator.generate_response(last_message)
-            print(f"{self._initiator_name}: {last_message}")
-
-            print('\n')
-
+            initiator_response = last_message
+            yield initiator_response
+            time.sleep(10)
             last_message = self._responder.generate_response(last_message)
-            print(f"{self._responder_name}: {last_message}")
-
-            print('\n\n')
+            responder_response = last_message
+            yield responder_response
+            time.sleep(10)
 
             

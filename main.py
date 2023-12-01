@@ -1,4 +1,4 @@
-from contphica.debate import Debate
+from contphica.debate.debate import Debate
 import os
 
 # this replicates the example from the example.ipynb notebook
