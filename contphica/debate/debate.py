@@ -19,6 +19,7 @@ DEFAULT_PROMPT_TEMPLATE = """
     Your opponent will do the same.
     You can finish if you think that your opponent persuades you, or if you persuaded your opponent, or if you have no more arguments to provide.
     You MUST NOT repeat your point of view in the end of every response. Just provide your arguments.
+    You MUST BE concise and eloquent.
 # Dispute Knowledge 
     {dispute_knowledge}
 # Chat history
@@ -127,10 +128,11 @@ class Debate:
         for i in range(self.limit):
             last_message = self._initiator.generate_response(last_message)
             initiator_response = last_message
+            yield initiator_response
             time.sleep(10)
             last_message = self._responder.generate_response(last_message)
             responder_response = last_message
-            yield initiator_response, responder_response
+            yield responder_response
             time.sleep(10)
 
             
