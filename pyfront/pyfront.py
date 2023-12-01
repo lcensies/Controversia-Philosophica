@@ -9,6 +9,7 @@ import sys
 import os
 sys.path.append("..")
 from contphica.debate import Debate
+import textwrap
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -72,6 +73,7 @@ async def set_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Setting model to {}".format(model))
 
 
+@send_action(constants.ChatAction.TYPING)
 async def set_topic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) == 0:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="Please specify a topic")
@@ -99,6 +101,7 @@ async def set_opinion_con(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text='Setting opinion con to "{}"'.format(opinion))
 
 
+@send_action(constants.ChatAction.TYPING)
 async def startdebate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     def get_debate(topic_, opinion_pro_, opinion_con_,
                    debater_name_pro="Debater Pro",
@@ -113,35 +116,50 @@ async def startdebate(update: Update, context: ContextTypes.DEFAULT_TYPE):
                   .with_debater_names(debater_name_pro, debater_name_con))
         return debate
 
-    def validate():
-        if 'model' not in context.user_data:
-            raise ValueError("Please set a model first")
-        if 'topic' not in context.user_data:
-            raise ValueError("Please set a topic first")
-        if 'opinion_pro' not in context.user_data:
-            raise ValueError("Please set a pro opinion first")
-        if 'opinion_con' not in context.user_data:
-            raise ValueError("Please set a con opinion first")
-    try:
-        validate()
-    except ValueError as e:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=str(e))
-        return
-    model = context.user_data['model']
-    topic = context.user_data['topic']
-    opinion_pro = context.user_data['opinion_pro']
-    opinion_con = context.user_data['opinion_con']
+    # def validate():
+    #     if 'model' not in context.user_data:
+    #         raise ValueError("Please set a model first")
+    #     if 'topic' not in context.user_data:
+    #         raise ValueError("Please set a topic first")
+    #     if 'opinion_pro' not in context.user_data:
+    #         raise ValueError("Please set a pro opinion first")
+    #     if 'opinion_con' not in context.user_data:
+    #         raise ValueError("Please set a con opinion first")
+    # try:
+    #     validate()
+    # except ValueError as e:
+    #     await context.bot.send_message(chat_id=update.effective_chat.id, text=str(e))
+    #     return
+    # model = context.user_data['model']
+    # topic = context.user_data['topic']
+    # opinion_pro = context.user_data['opinion_pro']
+    # opinion_con = context.user_data['opinion_con']
+    topic = 'The death penalty should be abolished'
+    opinion_pro = 'The death penalty is a barbaric practice that has no place in modern society'
+    opinion_con = 'The death penalty is a necessary deterrent to crime'
+    model = 'gpt3'
 
+    status_text = f"""
+                    Starting debate.
+                    Topic: {topic}
+                    Opinion pro: {opinion_pro}
+                    Opinion con: {opinion_con}
+                    Model: {model}
+                    """
+    status_text = textwrap.dedent(status_text)
     await context.bot.send_message(chat_id=update.effective_chat.id,
-                                   text=f"Starting debate.\nTopic: {topic}\nOpinion pro: {opinion_pro}\nOpinion con: {opinion_con}\nModel: {model}")
+                                   text=status_text,
+                                   parse_mode=constants.ParseMode.HTML)
+    await context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=constants.ChatAction.TYPING)
     debate = get_debate(topic, opinion_pro, opinion_con)
     for i, (pro_argument, con_argument) in enumerate(debate.start_generator()):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="*Debate round {}*".format(i),
-                                       parse_mode=constants.ParseMode.MARKDOWN_V2)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="*Pro:*\n\n" + pro_argument,
-                                       parse_mode=constants.ParseMode.MARKDOWN_V2)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="*Con:*\n\n" + con_argument,
-                                       parse_mode=constants.ParseMode.MARKDOWN_V2)
+        await context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=constants.ChatAction.TYPING)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<b>===== Debate round {i+1} =====</b>",
+                                       parse_mode=constants.ParseMode.HTML)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<b>Pro:</b>\n" + pro_argument,
+                                       parse_mode=constants.ParseMode.HTML)
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<b>Con:</b>\n" + con_argument,
+                                       parse_mode=constants.ParseMode.HTML)
 
 
 def main():
