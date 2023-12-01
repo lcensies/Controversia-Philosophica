@@ -13,10 +13,16 @@ import sys
 import os
 from dotenv import load_dotenv
 
+from contphica.judge.gpt_summarizing_judge import GPTSummarizingJudge
 from contphica.judge.judge_worker import JudgeWorker
+
+import time
+
 
 sys.path.append("..")
 from contphica.debate import Debate
+import contphica.agents.gpt_agent
+from langchain.chat_models.openai import ChatOpenAI
 import nest_asyncio
 import textwrap
 from emoji import emojize
@@ -32,13 +38,16 @@ class Emojis:
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.WARNING,
-    # stream=sys.stdout
+    level=logging.INFO
 )
 
-load_dotenv(str(Path(__file__).parent.parent.joinpath(".env")))
+try:
+    load_dotenv(str(Path(__file__).parent.parent.joinpath(".env")))
+except Exception:
+    pass
 tok = os.getenv("TELEGRAM_API_KEY")
 openai_token = os.getenv("OPENAI_API_KEY")
+judge_openai_token = os.getenv("JUDGE_OPENAI_API_KEY")
 
 (SET_MODEL, SET_TOPIC, SET_OPINION_PRO, SET_OPINION_CON, SET_KNOWLEDGE,
  SET_DEBATER_NAMES, SET_PROMPT, START_DEBATE, DEBATE_CONFIRM) = range(9)
@@ -71,16 +80,11 @@ def add_handlers(application, handlers):
         application.add_handler(handler)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    greeting = """Welcome to Controversia Philosophica! Here you can make LLM agents debate about any topic you want."""
     context.user_data["model"] = DEFAULT_MODEL
-    context.user_data['topic'] = "Do the modern AI models have an understanding?"
-    context.user_data['opinion_pro'] = "Yes, modern AI models carry intelligence. They are designed to process large amounts of data, learn patterns, and make predictions or decisions based on that data. This ability to process and analyze data is a form of intelligence."
-    context.user_data['opinion_con'] = "Modern AI models may be able to process and analyze vast amounts of data, but this does not necessarily mean that they have understanding. While they can make predictions and decisions based on patterns in the data, they lack the ability to truly comprehend the meaning or context behind the information they are processing. Understanding requires a deeper level of comprehension and knowledge that AI models currently lack."
-
+    greeting = """Welcome to Controversia Philosophica! Here you can make LLM agents debate about any topic you want. Type /debate to start a debate."""
     await context.bot.send_message(chat_id=update.effective_chat.id, text=greeting)
 
-    # TODO: remove
-    await start_debate(update, context)
+
 
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -88,7 +92,6 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def set_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    avail_models = ['gpt3', 'dialogpt', "underground_gpt"]
 
     async def validate(model):
         if len(model) == 0:
@@ -135,8 +138,6 @@ async def set_opinion_con(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=f'Setting opinion con to "{opinion}".\nPlease specify a model. Available models: {avail_models}')
     return SET_MODEL
 
-    # TODO: cancel on reset
-
 
 async def start_debate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     judgements: Optional[typing.List[str]] = None
@@ -181,7 +182,8 @@ async def start_debate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     opinion_con = context.user_data['opinion_con']
     debater_pro_name = "Debater Pro"
     debater_con_name = "Debater Con"
-    rounds = 2
+    dispute_knowledge = "<no dispute knowledge given>"
+    rounds = 1
 
     status_text = f"""
                     Starting debate.
@@ -190,6 +192,7 @@ async def start_debate(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     Opinion con: {opinion_con}
                     Model: {model}
                     """
+    logging.log(logging.INFO, status_text.replace("\n", ";"))
     status_text = textwrap.dedent(status_text)
     await context.bot.send_message(chat_id=update.effective_chat.id,
                                    text=status_text,
@@ -199,40 +202,35 @@ async def start_debate(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         debater_pro_name, debater_con_name)
 
     await update.message.reply_text(Emojis.wait + " Inference in progress. This will take about a minute. Please hold on!")
-
-    if debate.has_judge:
-        judge_worker = JudgeWorker(debate)
-        judge_worker_task = asyncio.create_task(judge_worker.start())
-
     debate_generator = debate.start_generator()
+    chat_history = []
     for i in range(rounds):
         await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<b>===== Debate round {i+1} =====</b>",
                                        parse_mode=constants.ParseMode.HTML)
 
         pro_argument = next(debate_generator)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<b>Pro:</b>\n" + pro_argument,
+        pro_argument_text = f"<b>{debater_pro_name}:</b>\n" + pro_argument
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=pro_argument_text,
                                        parse_mode=constants.ParseMode.HTML)
 
         con_argument = next(debate_generator)
-
-        if debate.has_judge:
-            await judge_worker.add_debate_results(pro_argument, con_argument)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"<b>Con:</b>\n" + con_argument,
+        con_argument_text = f"<b>{debater_con_name}:</b>\n" + con_argument
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=con_argument_text,
                                        parse_mode=constants.ParseMode.HTML)
+        chat_history.append(pro_argument_text)
+        chat_history.append(con_argument_text)
 
-    if debate.has_judge:
-        judgements = await judge_worker.finalize()
 
-    if len(judgements) > 0:
-        # If there is no judgements in array, probably
-        # there is an issue with the judge, for example
-        # due to the API quota
-        judgement = judgements[-1]
+    judge: GPTSummarizingJudge = GPTSummarizingJudge(judge_openai_token)
+    await update.message.reply_text(Emojis.wait + f" Waiting for judge verdict... This will take nearly half a minute.", parse_mode=constants.ParseMode.HTML)
+    verdict = await judge.make_verdict(chat_history,
+                                debater_pro_name,
+                                debater_con_name,
+                                opinion_pro,
+                                opinion_con,
+                                dispute_knowledge)
 
-        await context.bot.send_message(chat_id=update.effective_chat.id,
-                                       text="*Iudex judgement:*\n\n" + judgement,
-                                       parse_mode=constants.ParseMode.HTML)
-
+    await update.message.reply_text(f"<b>Judge:</b>\n{verdict}", parse_mode=constants.ParseMode.HTML)
     return ConversationHandler.END
 
 
@@ -265,7 +263,6 @@ def main():
         'model': set_model,
         'start_debate': start_debate,
     }
-
     handlers = get_cmd_handlers(cmd_handlers)
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("debate", start_debate_state_machine)],
